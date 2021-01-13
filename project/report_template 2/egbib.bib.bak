@@ -1,0 +1,35 @@
+
+@misc{Authors14,
+ author = {Authors},
+ title = {The frobnicatable foo filter},
+ note = {Face and Gesture  submission ID 324. Supplied as additional material {\tt fg324.pdf}},
+ year = 2014
+}
+
+@online{xiao2017/online,
+  author       = {Han Xiao and Kashif Rasul and Roland Vollgraf},
+  title        = {Fashion-MNIST: a Novel Image Dataset for Benchmarking Machine Learning Algorithms},
+  date         = {2017-08-28},
+  year         = {2017},
+  eprintclass  = {cs.LG},
+  eprinttype   = {arXiv},
+  eprint       = {cs.LG/1708.07747},
+}
+
+@misc{szegedy2016inceptionv4,
+      title={Inception-v4, Inception-ResNet and the Impact of Residual Connections on Learning}, 
+      author={Christian Szegedy and Sergey Ioffe and Vincent Vanhoucke and Alex Alemi},
+      year={2016},
+      eprint={1602.07261},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+
+@misc{ioffe2015batch,
+      title={Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift}, 
+      author={Sergey Ioffe and Christian Szegedy},
+      year={2015},
+      eprint={1502.03167},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}

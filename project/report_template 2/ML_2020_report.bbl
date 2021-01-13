@@ -1,0 +1,24 @@
+\begin{thebibliography}{1}\itemsep=-1pt
+
+\bibitem{Authors14}
+Authors.
+\newblock The frobnicatable foo filter, 2014.
+\newblock Face and Gesture submission ID 324. Supplied as additional material
+  {\tt fg324.pdf}.
+
+\bibitem{ioffe2015batch}
+Sergey Ioffe and Christian Szegedy.
+\newblock Batch normalization: Accelerating deep network training by reducing
+  internal covariate shift, 2015.
+
+\bibitem{szegedy2016inceptionv4}
+Christian Szegedy, Sergey Ioffe, Vincent Vanhoucke, and Alex Alemi.
+\newblock Inception-v4, inception-resnet and the impact of residual connections
+  on learning, 2016.
+
+\bibitem{xiao2017/online}
+Han Xiao, Kashif Rasul, and Roland Vollgraf.
+\newblock Fashion-mnist: a novel image dataset for benchmarking machine
+  learning algorithms, 2017.
+
+\end{thebibliography}
