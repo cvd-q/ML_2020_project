@@ -30,10 +30,10 @@ y_train = pd.read_csv(os.path.join(DATA_BASE_FOLDER, 'train.csv'))['class'].valu
 y_valid = pd.read_csv(os.path.join(DATA_BASE_FOLDER, 'validation.csv'))['class'].values
 
 #only 500 images and test dataset won't be used
-x_train = x_train[0:200]
-x_valid = x_valid[0:200]
-y_train = y_train[0:200]
-y_valid = y_valid[0:200]
+x_train = x_train[0:300]
+x_valid = x_valid[0:300]
+y_train = y_train[0:300]
+y_valid = y_valid[0:300]
 
 y_labels = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
 x_train = x_train.reshape(x_train.shape[0], 28, 28) # reconstruct images
