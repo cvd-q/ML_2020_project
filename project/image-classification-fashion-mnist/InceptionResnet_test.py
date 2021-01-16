@@ -22,7 +22,7 @@ log_dir= 'logs/InceptionResnet_test' #'./logs/'
 checkpoint_filepath = 'checkpoint_InceptionResnet_test/'#'./checkpoint/'
 
 # PREPARE DATA
-DATA_BASE_FOLDER =  './' #'/kaggle/input/ml-project-2020-dataset/'
+DATA_BASE_FOLDER = '/kaggle/input/ml-project-2020-dataset/'
 x_train = np.load(os.path.join(DATA_BASE_FOLDER, 'train.npy'))
 x_valid = np.load(os.path.join(DATA_BASE_FOLDER, 'validation.npy'))
 x_test = np.load(os.path.join(DATA_BASE_FOLDER, 'test.npy'))
@@ -30,10 +30,10 @@ y_train = pd.read_csv(os.path.join(DATA_BASE_FOLDER, 'train.csv'))['class'].valu
 y_valid = pd.read_csv(os.path.join(DATA_BASE_FOLDER, 'validation.csv'))['class'].values
 
 #only 500 images and test dataset won't be used
-x_train = x_train[0:300]
-x_valid = x_valid[0:300]
-y_train = y_train[0:300]
-y_valid = y_valid[0:300]
+# x_train = x_train[0:50]
+# x_valid = x_valid[0:50]
+# y_train = y_train[0:50]
+# y_valid = y_valid[0:50]
 
 y_labels = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
 x_train = x_train.reshape(x_train.shape[0], 28, 28) # reconstruct images
@@ -42,8 +42,7 @@ x_test = x_test.reshape(x_test.shape[0], 28, 28)
 x_train = tf.expand_dims(x_train, axis=-1)
 x_valid = tf.expand_dims(x_valid, axis=-1)
 x_test = tf.expand_dims(x_test, axis=-1)
-img_generator = ImageDataGenerator(preprocessing_function=lambda x: x/255.)
-                                   #horizontal_flip=True)
+img_generator = ImageDataGenerator(preprocessing_function=lambda x: x/255., horizontal_flip=True)
 
 def conv2d_bn(x,
               filters,
@@ -279,19 +278,16 @@ class InceptionResNetV2Fashion(Model):
         y_ohe = np.squeeze(y)
         y_ohe = np.expand_dims(y_ohe, axis=1)
         y_ohe = enc.transform(y_ohe).toarray()
-        r_array = []
+        r_sum = 0
         for c in range(self.N_CLASS):
             try:
                 r = roc_auc_score(y_ohe[:, c], y_pred[:, c])
                 #print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = ', r)
-                r_array += r
+                r_sum += r
             except ValueError:
                 print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = None!')
 
-        try:
-            mean_auroc = sum(r_array) / len(r_array)
-        except ZeroDivisionError:
-            mean_auroc = 0.5
+        mean_auroc = r_sum / self.N_CLASS
         logs_dict = {m.name: m.result() for m in self.metrics}
         logs_dict.update({'mean_auroc':mean_auroc})
 
@@ -347,7 +343,7 @@ HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001, 0.01]))
 #HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001]))
 #HP_INCEPTION_DROP_RATE = hp.HParam('inception_drop_rate', hp.Discrete([0.7, 0.5]))
 #HP_DENSE_DROP_RATE = hp.HParam('dense_drop_rate', hp.Discrete([0.7, 0.5]))
-HP_DROP_RATE = hp.HParam('drop_rate', hp.Discrete([0.8, 0.5]))
+HP_DROP_RATE = hp.HParam('drop_rate', hp.Discrete([0.8, 0.65]))
 HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd']))
 #reference metric must be equal to that displayed in tensorboard (tf.summary...)
 METRIC_VALID_ACCURACY = hp.Metric("epoch_accuracy", group="validation", display_name="valid_accuracy")
@@ -384,11 +380,11 @@ for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
                                                        log_dir=(log_dir + dir_name))
                 checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_filepath + dir_name,
                                                                         save_weights_only=True,
-                                                                        monitor='val_accuracy',
+                                                                        monitor='accuracy',
                                                                         mode='max',
                                                                         save_best_only=True)
                 early_callback = tf.keras.callbacks.EarlyStopping(
-                    monitor='val_accuracy', min_delta=0, patience=3, verbose=1,
+                    monitor='accuracy', min_delta=0, patience=3, verbose=1,
                     mode='max'
                 )
                 model = InceptionResNetV2Fashion((28,28,1), N_CLASS,
@@ -400,7 +396,7 @@ for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
                 #lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(boundaries, values)
                 lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
                                                                                 LR,
-                                                                                decay_steps=300,
+                                                                                decay_steps=400,
                                                                                 decay_rate=0.90,
                                                                                 staircase=True)
                 if OPTIMIZER == 'adam':
@@ -413,8 +409,8 @@ for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
                               run_eagerly=True)
                 model.fit(img_generator.flow(x_train, y_train, batch_size=32, shuffle=True),
                           validation_data=img_generator.flow(x_valid, y_valid, batch_size=256, shuffle=False),
-                          epochs=4, callbacks=[tb_callback_hparam, tb_cm_callback, checkpoint_callback, early_callback],
-                          verbose=1)
+                          epochs=12, callbacks=[tb_callback_hparam, tb_cm_callback, checkpoint_callback, early_callback],
+                          verbose=2)
                             #batch_size>1! (computing AUROC)
                             #checkpoint_callback is useless if epoch=1
 
