@@ -22,7 +22,7 @@ log_dir= 'logs/InceptionResnet_test' #'./logs/'
 checkpoint_filepath = 'checkpoint_InceptionResnet_test/'#'./checkpoint/'
 
 # PREPARE DATA
-DATA_BASE_FOLDER = '/kaggle/input/ml-project-2020-dataset/'
+DATA_BASE_FOLDER = './' #'/kaggle/input/ml-project-2020-dataset/'
 x_train = np.load(os.path.join(DATA_BASE_FOLDER, 'train.npy'))
 x_valid = np.load(os.path.join(DATA_BASE_FOLDER, 'validation.npy'))
 x_test = np.load(os.path.join(DATA_BASE_FOLDER, 'test.npy'))
