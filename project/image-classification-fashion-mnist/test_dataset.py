@@ -22,7 +22,7 @@ log_dir = 'logs/InceptionResnet_test'  # './logs/'
 checkpoint_filepath = 'checkpoint_InceptionResnet_test/'  # './checkpoint/'
 
 # PREPARE DATA
-DATA_BASE_FOLDER = './'  # '/kaggle/input/ml-project-2020-dataset/'
+DATA_BASE_FOLDER = '/kaggle/input/ml-project-2020-dataset/'
 x_train = np.load(os.path.join(DATA_BASE_FOLDER, 'train.npy'))
 x_valid = np.load(os.path.join(DATA_BASE_FOLDER, 'validation.npy'))
 x_test = np.load(os.path.join(DATA_BASE_FOLDER, 'test.npy'))
@@ -248,62 +248,61 @@ class InceptionResNetV2Fashion(Model):
 
         super(InceptionResNetV2Fashion, self).__init__(inputs=inputs, outputs=x)
 
-    def test_step(self, data):
-        """The logic for one evaluation step.
-        This method can be overridden to support custom evaluation logic.
-        This method is called by `Model.make_test_function`.
-        This function should contain the mathematical logic for one step of
-        evaluation.
-        This typically includes the forward pass, loss calculation, and metrics
-        updates.
-        Configuration details for *how* this logic is run (e.g. `tf.function` and
-        `tf.distribute.Strategy` settings), should be left to
-        `Model.make_test_function`, which can also be overridden.
-        Arguments:
-          data: A nested structure of `Tensor`s.
-        Returns:
-          A `dict` containing values that will be passed to
-          `tf.keras.callbacks.CallbackList.on_train_batch_end`. Typically, the
-          values of the `Model`'s metrics are returned.
-        """
-        data = data_adapter.expand_1d(data)
-        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-
-        # BATCH (take care of OOM)
-        y_pred = self(x, training=False)
-        # Updates stateful loss metrics.
-        self.compiled_loss(
-            y, y_pred, sample_weight, regularization_losses=self.losses)
-
-        self.compiled_metrics.update_state(y, y_pred, sample_weight)
-
-        y_pred = np.squeeze(y_pred)
-        y_ohe = np.squeeze(y)
-        y_ohe = np.expand_dims(y_ohe, axis=1)
-        y_ohe = enc.transform(y_ohe).toarray()
-        r_sum = 0
-        for c in range(self.N_CLASS):
-            try:
-                r = roc_auc_score(y_ohe[:, c], y_pred[:, c])
-                # print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = ', r)
-                r_sum += r
-            except ValueError:
-                print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = None!')
-
-        mean_auroc = r_sum / self.N_CLASS
-        logs_dict = {m.name: m.result() for m in self.metrics}
-        logs_dict.update({'mean_auroc': mean_auroc})
-
-        return logs_dict
+    # def test_step(self, data):
+    #     """The logic for one evaluation step.
+    #     This method can be overridden to support custom evaluation logic.
+    #     This method is called by `Model.make_test_function`.
+    #     This function should contain the mathematical logic for one step of
+    #     evaluation.
+    #     This typically includes the forward pass, loss calculation, and metrics
+    #     updates.
+    #     Configuration details for *how* this logic is run (e.g. `tf.function` and
+    #     `tf.distribute.Strategy` settings), should be left to
+    #     `Model.make_test_function`, which can also be overridden.
+    #     Arguments:
+    #       data: A nested structure of `Tensor`s.
+    #     Returns:
+    #       A `dict` containing values that will be passed to
+    #       `tf.keras.callbacks.CallbackList.on_train_batch_end`. Typically, the
+    #       values of the `Model`'s metrics are returned.
+    #     """
+    #     data = data_adapter.expand_1d(data)
+    #     x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+    #
+    #     # BATCH (take care of OOM)
+    #     y_pred = self(x, training=False)
+    #     # Updates stateful loss metrics.
+    #     self.compiled_loss(
+    #         y, y_pred, sample_weight, regularization_losses=self.losses)
+    #
+    #     self.compiled_metrics.update_state(y, y_pred, sample_weight)
+    #
+    #     y_pred = np.squeeze(y_pred)
+    #     y_ohe = np.squeeze(y)
+    #     y_ohe = np.expand_dims(y_ohe, axis=1)
+    #     y_ohe = enc.transform(y_ohe).toarray()
+    #     r_sum = 0
+    #     for c in range(self.N_CLASS):
+    #         try:
+    #             r = roc_auc_score(y_ohe[:, c], y_pred[:, c])
+    #             # print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = ', r)
+    #             r_sum += r
+    #         except ValueError:
+    #             print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = None!')
+    #
+    #     mean_auroc = r_sum / self.N_CLASS
+    #     logs_dict = {m.name: m.result() for m in self.metrics}
+    #     logs_dict.update({'mean_auroc': mean_auroc})
+    #
+    #     return logs_dict
 
 
 class CMTensorBoardCallback(tf.keras.callbacks.TensorBoard):
     def __init__(self, file_writer, **kwargs):
         super(CMTensorBoardCallback, self).__init__(**kwargs)
         self.file_writer = file_writer
-        self.epoch_step = 0
 
-    def on_test_end(self, logs=None):
+    def on_train_end(self, logs=None):
         # Use the model to predict the values from the validation dataset.
         test_pred_raw = self.model.predict(x_valid)  # for large input
         # AUROC print
@@ -312,14 +311,16 @@ class CMTensorBoardCallback(tf.keras.callbacks.TensorBoard):
         y_ohe = np.expand_dims(y_ohe, axis=1)
         y_ohe = enc.transform(y_ohe).toarray()
         print('')
-        r_array = []
+        r_sum = 0
         for c in range(N_CLASS):
             try:
                 r = roc_auc_score(y_ohe[:, c], y_pred[:, c])
                 print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = ', r)
-                r_array += r
+                r_sum += r
             except ValueError:
                 print('Label: ', y_labels[c], ', ', 'AUROC one vs rest = None!')
+        mean_auroc = r_sum / N_CLASS
+        print('MEAN AUROC: ', mean_auroc)
 
         test_pred = np.argmax(test_pred_raw, axis=1)
         # Calculate the confusion matrix.
@@ -329,25 +330,28 @@ class CMTensorBoardCallback(tf.keras.callbacks.TensorBoard):
         cm_image = plot_to_image(figure)
         # Log the confusion matrix as an image summary.
         with self.file_writer.as_default():
-            tf.summary.image("End epoch Confusion Matrix", cm_image, step=self.epoch_step, description=str(logs))
+            tf.summary.image("End train Confusion Matrix", cm_image, step=1, description=str(logs))
 
-        self.epoch_step += 1
 
         self._pop_writer()
 
+        if self._is_tracing:
+            self._stop_trace()
 
-'''import sys
-sys.setrecursionlimit(10000)'''
+        self._close_writers()
+        self._delete_tmp_write_dir()
 
-HP_REDUCE_SIZE = hp.HParam('reduce_size', hp.Discrete([1, 2, 3]))
+
+
+HP_REDUCE_SIZE = hp.HParam('reduce_size', hp.Discrete([1, 2]))
 # HP_DENSE_UNITS = hp.HParam('dense_units', hp.Discrete([1000, 500]))
 # HP_DENSE_UNITS = hp.HParam('dense_units', hp.Discrete([100]))
 HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001, 0.01]))
 # HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001]))
 # HP_INCEPTION_DROP_RATE = hp.HParam('inception_drop_rate', hp.Discrete([0.7, 0.5]))
 # HP_DENSE_DROP_RATE = hp.HParam('dense_drop_rate', hp.Discrete([0.7, 0.5]))
-HP_DROP_RATE = hp.HParam('drop_rate', hp.Discrete([0.8, 0.65]))
-HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd']))
+HP_DROP_RATE = hp.HParam('drop_rate', hp.Discrete([0.8, 0.5]))
+HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd'])) #'sgd'
 # reference metric must be equal to that displayed in tensorboard (tf.summary...)
 METRIC_VALID_ACCURACY = hp.Metric("epoch_accuracy", group="validation", display_name="valid_accuracy")
 METRIC_MEAN_AUROC = hp.Metric("epoch_mean_auroc", group="validation", display_name="valid_mean_auroc")
@@ -379,16 +383,19 @@ for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
                 tb_callback_hparam = hp.KerasCallback(log_dir + dir_name, hparams)
                 file_writer = tf.summary.create_file_writer(log_dir + dir_name)
                 tb_cm_callback = CMTensorBoardCallback(file_writer,
-                                                       log_dir=(log_dir + dir_name))
+                                                         log_dir=(log_dir + dir_name))
                 checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_filepath + dir_name,
                                                                          save_weights_only=True,
-                                                                         monitor='accuracy',
+                                                                         monitor='val_accuracy',
                                                                          mode='max',
                                                                          save_best_only=True)
                 early_callback = tf.keras.callbacks.EarlyStopping(
                     monitor='accuracy', min_delta=0, patience=3, verbose=1,
                     mode='max'
                 )
+                reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.2, mode = 'max',
+                                              patience=3, min_lr=0.0001, verbose=1)
+
                 model = InceptionResNetV2Fashion((28, 28, 1), N_CLASS,
                                                  REDUCE_SIZE,
                                                  DROP_RATE)
@@ -396,19 +403,15 @@ for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
                 # boundaries = [100, 1000]
                 # values = [LR, LR/10., LR/100.]
                 # lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(boundaries, values)
-                lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-                    LR,
-                    decay_steps=400,
-                    decay_rate=0.90,
-                    staircase=True)
+
                 if OPTIMIZER == 'adam':
-                    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+                    optimizer = tf.keras.optimizers.Adam(learning_rate=LR)
                 else:
-                    optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule)
+                    optimizer = tf.keras.optimizers.SGD(learning_rate=LR)
                 metric = tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy')
 
                 model.compile(optimizer=optimizer, loss=loss, metrics=[metric],
-                              run_eagerly=True)
+                              run_eagerly=False)
 
                 # CREATE DATASET
                 def scale(image, label):
@@ -421,12 +424,12 @@ for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
                 valid_dataset = tf.data.Dataset.from_tensor_slices((x_valid, y_valid))
 
                 train_dataset = train_dataset.map(scale).cache().shuffle(10000).batch(BATCH_SIZE).prefetch(2)
-                valid_dataset = valid_dataset.batch(BATCH_SIZE*2)
+                valid_dataset = valid_dataset.map(scale).batch(BATCH_SIZE*10) #scale function MANDATORY
 
                 model.fit(train_dataset,
                           validation_data=valid_dataset,
-                          epochs=12,
-                          callbacks=[tb_callback_hparam, tb_cm_callback, checkpoint_callback, early_callback],
-                          verbose=1)
+                          epochs=6,
+                          callbacks=[tb_callback_hparam, tb_cm_callback, checkpoint_callback, early_callback, reduce_lr_callback],
+                          verbose=2)
                 # batch_size>1! (computing AUROC)
                 # checkpoint_callback is useless if epoch=1
