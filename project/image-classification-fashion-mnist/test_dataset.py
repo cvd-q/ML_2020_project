@@ -180,7 +180,7 @@ class InceptionResNetV2Fashion(Model):
         self.N_CLASS = tf.constant(n_class)
 
         inputs = Input(input_shape)
-        # Stem block: 24 x 24
+        # Stem block: 24 x 24: SIMILAR TO PAPER, JUST STEM BLOCK + DROP
         x = conv2d_bn(inputs, int(32 / REDUCE_SIZE), 3)
         x = conv2d_bn(x, int(32 / REDUCE_SIZE), 3)
         x = conv2d_bn(x, int(64 / REDUCE_SIZE), 3)
@@ -190,11 +190,11 @@ class InceptionResNetV2Fashion(Model):
         x = layers.MaxPooling2D(3, strides=1)(x)
         x = layers.Dropout(DROP_RATE)(x)
 
-        # 5x block35 (Inception-ResNet-A block): 24 x 24
+        # 5x block35 (Inception-ResNet-A block): 24 x 24: 10 IN PAPER
         for block_idx in range(1, 6):
             x = inception_resnet_block(
                 x, scale=0.17, block_type='block35', block_idx=block_idx)
-        # Mixed 6a (Reduction-A block): 24 x 24 x 1088
+        # Mixed 6a (Reduction-A block): 24 x 24 x 1088: SAME TO PAPER + DROP
         branch_0 = conv2d_bn(x, int(384 / REDUCE_SIZE), 3, strides=2, padding='valid')
         branch_1 = conv2d_bn(x, int(256 / REDUCE_SIZE), 1)
         branch_1 = conv2d_bn(branch_1, int(256 / REDUCE_SIZE), 3)
@@ -205,12 +205,12 @@ class InceptionResNetV2Fashion(Model):
         x = layers.Concatenate(axis=channel_axis, name='mixed_6a')(branches)
         x = layers.Dropout(DROP_RATE)(x)
 
-        # 10x block17 (Inception-ResNet-B block): 24 x 24
+        # 10x block17 (Inception-ResNet-B block): 24 x 24: 20 IN PAPER
         for block_idx in range(1, 11):
             x = inception_resnet_block(
                 x, scale=0.1, block_type='block17', block_idx=block_idx)
 
-        # Mixed 7a (Reduction-B block): 11 x 11
+        # Mixed 7a (Reduction-B block): 11 x 11: SAME TO PAPER + DROP
         branch_0 = conv2d_bn(x, int(256 / REDUCE_SIZE), 1)
         branch_0 = conv2d_bn(branch_0, int(384 / REDUCE_SIZE), 3, strides=2, padding='valid')
         branch_1 = conv2d_bn(x, int(256 / REDUCE_SIZE), 1)
@@ -223,7 +223,7 @@ class InceptionResNetV2Fashion(Model):
         x = layers.Concatenate(axis=channel_axis, name='mixed_7a')(branches)
         x = layers.Dropout(DROP_RATE)(x)
 
-        # 5x block8 (Inception-ResNet-C block): 11 x 11
+        # 5x block8 (Inception-ResNet-C block): 11 x 11: 10 IN PAPER + DROP
         for block_idx in range(1, 5):
             x = inception_resnet_block(
                 x, scale=0.2, block_type='block8', block_idx=block_idx)
@@ -231,7 +231,7 @@ class InceptionResNetV2Fashion(Model):
             x, scale=1., activation=None, block_type='block8', block_idx=5)
         x = layers.Dropout(DROP_RATE)(x)
 
-        # Final convolution block: 5 x 5
+        # Final convolution block: 5 x 5: FROM NOW CUSTOMIZATION
         x = conv2d_bn(x, int(1536 / REDUCE_SIZE), 1, name='conv_7b')
         x = layers.Dropout(DROP_RATE)(x)
 
@@ -297,6 +297,11 @@ class InceptionResNetV2Fashion(Model):
     #     return logs_dict
 
 
+def scale(image, label):
+    image = tf.cast(image, tf.float32)
+    image /= 255
+    return image, label
+
 class CMTensorBoardCallback(tf.keras.callbacks.TensorBoard):
     def __init__(self, file_writer, **kwargs):
         super(CMTensorBoardCallback, self).__init__(**kwargs)
@@ -304,7 +309,7 @@ class CMTensorBoardCallback(tf.keras.callbacks.TensorBoard):
 
     def on_train_end(self, logs=None):
         # Use the model to predict the values from the validation dataset.
-        test_pred_raw = self.model.predict(x_valid)  # for large input
+        test_pred_raw = self.model.predict(x_valid / 255)  # for large input, SCALE IS IMPORTANT!!!
         # AUROC print
         y_pred = np.squeeze(test_pred_raw)
         y_ohe = np.squeeze(y_valid)
@@ -342,94 +347,92 @@ class CMTensorBoardCallback(tf.keras.callbacks.TensorBoard):
         self._delete_tmp_write_dir()
 
 
+if __name__ == "__main__":
+    HP_REDUCE_SIZE = hp.HParam('reduce_size', hp.Discrete([1, 2]))
+    # HP_DENSE_UNITS = hp.HParam('dense_units', hp.Discrete([1000, 500]))
+    # HP_DENSE_UNITS = hp.HParam('dense_units', hp.Discrete([100]))
+    HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001, 0.01]))
+    # HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001]))
+    # HP_INCEPTION_DROP_RATE = hp.HParam('inception_drop_rate', hp.Discrete([0.7, 0.5]))
+    # HP_DENSE_DROP_RATE = hp.HParam('dense_drop_rate', hp.Discrete([0.7, 0.5]))
+    HP_DROP_RATE = hp.HParam('drop_rate', hp.Discrete([0.8, 0.5]))
+    HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd'])) #'sgd'
+    # reference metric must be equal to that displayed in tensorboard (tf.summary...)
+    METRIC_VALID_ACCURACY = hp.Metric("epoch_accuracy", group="validation", display_name="valid_accuracy")
+    METRIC_MEAN_AUROC = hp.Metric("epoch_mean_auroc", group="validation", display_name="valid_mean_auroc")
+    METRIC_TRAIN_ACCURACY = hp.Metric("epoch_accuracy", group="train", display_name="train_accuracy")
 
-HP_REDUCE_SIZE = hp.HParam('reduce_size', hp.Discrete([1, 2]))
-# HP_DENSE_UNITS = hp.HParam('dense_units', hp.Discrete([1000, 500]))
-# HP_DENSE_UNITS = hp.HParam('dense_units', hp.Discrete([100]))
-HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001, 0.01]))
-# HP_LR = hp.HParam('initial_lr', hp.Discrete([0.001]))
-# HP_INCEPTION_DROP_RATE = hp.HParam('inception_drop_rate', hp.Discrete([0.7, 0.5]))
-# HP_DENSE_DROP_RATE = hp.HParam('dense_drop_rate', hp.Discrete([0.7, 0.5]))
-HP_DROP_RATE = hp.HParam('drop_rate', hp.Discrete([0.8, 0.5]))
-HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['adam', 'sgd'])) #'sgd'
-# reference metric must be equal to that displayed in tensorboard (tf.summary...)
-METRIC_VALID_ACCURACY = hp.Metric("epoch_accuracy", group="validation", display_name="valid_accuracy")
-METRIC_MEAN_AUROC = hp.Metric("epoch_mean_auroc", group="validation", display_name="valid_mean_auroc")
-METRIC_TRAIN_ACCURACY = hp.Metric("epoch_accuracy", group="train", display_name="train_accuracy")
+    with tf.summary.create_file_writer(log_dir).as_default():
+        hp.hparams_config(
+            hparams=[HP_REDUCE_SIZE,
+                     HP_DROP_RATE,
+                     HP_LR,
+                     HP_OPTIMIZER],
+            metrics=[METRIC_VALID_ACCURACY,
+                     METRIC_MEAN_AUROC,
+                     METRIC_TRAIN_ACCURACY]
+        )
 
-with tf.summary.create_file_writer(log_dir).as_default():
-    hp.hparams_config(
-        hparams=[HP_REDUCE_SIZE,
-                 HP_DROP_RATE,
-                 HP_LR,
-                 HP_OPTIMIZER],
-        metrics=[METRIC_VALID_ACCURACY,
-                 METRIC_MEAN_AUROC,
-                 METRIC_TRAIN_ACCURACY]
-    )
+    for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
+        for DROP_RATE in HP_DROP_RATE.domain.values:
+            for LR in HP_LR.domain.values:
+                for OPTIMIZER in HP_OPTIMIZER.domain.values:
+                    hparams = {HP_REDUCE_SIZE: REDUCE_SIZE,
+                               HP_DROP_RATE: DROP_RATE,
+                               HP_LR: LR,
+                               HP_OPTIMIZER: OPTIMIZER}
+                    dir_name = ' ' + 'REDUCE_SIZE-' + str(REDUCE_SIZE) + ' ' + \
+                               'DROP_RATE-' + str(DROP_RATE) + ' ' + \
+                               'LR-' + str(LR) + ' ' + 'OPTIMIZER-' + str(OPTIMIZER)
+                    print('HP ---> ', dir_name)
+                    tb_callback_hparam = hp.KerasCallback(log_dir + dir_name, hparams)
+                    file_writer = tf.summary.create_file_writer(log_dir + dir_name)
+                    tb_cm_callback = CMTensorBoardCallback(file_writer,
+                                                             log_dir=(log_dir + dir_name))
+                    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_filepath + dir_name,
+                                                                             save_weights_only=True,
+                                                                             monitor='val_accuracy',
+                                                                             mode='max',
+                                                                             save_best_only=True)
+                    early_callback = tf.keras.callbacks.EarlyStopping(
+                        monitor='accuracy', min_delta=0, patience=3, verbose=1,
+                        mode='max'
+                    )
+                    reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.2, mode = 'max',
+                                                  patience=3, min_lr=0.0001, verbose=1)
 
-for REDUCE_SIZE in HP_REDUCE_SIZE.domain.values:
-    for DROP_RATE in HP_DROP_RATE.domain.values:
-        for LR in HP_LR.domain.values:
-            for OPTIMIZER in HP_OPTIMIZER.domain.values:
-                hparams = {HP_REDUCE_SIZE: REDUCE_SIZE,
-                           HP_DROP_RATE: DROP_RATE,
-                           HP_LR: LR,
-                           HP_OPTIMIZER: OPTIMIZER}
-                dir_name = ' ' + 'REDUCE_SIZE-' + str(REDUCE_SIZE) + ' ' + \
-                           'DROP_RATE-' + str(DROP_RATE) + ' ' + \
-                           'LR-' + str(LR) + ' ' + 'OPTIMIZER-' + str(OPTIMIZER)
-                print('HP ---> ', dir_name)
-                tb_callback_hparam = hp.KerasCallback(log_dir + dir_name, hparams)
-                file_writer = tf.summary.create_file_writer(log_dir + dir_name)
-                tb_cm_callback = CMTensorBoardCallback(file_writer,
-                                                         log_dir=(log_dir + dir_name))
-                checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_filepath + dir_name,
-                                                                         save_weights_only=True,
-                                                                         monitor='val_accuracy',
-                                                                         mode='max',
-                                                                         save_best_only=True)
-                early_callback = tf.keras.callbacks.EarlyStopping(
-                    monitor='accuracy', min_delta=0, patience=3, verbose=1,
-                    mode='max'
-                )
-                reduce_lr_callback = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.2, mode = 'max',
-                                              patience=3, min_lr=0.0001, verbose=1)
+                    model = InceptionResNetV2Fashion((28, 28, 1), N_CLASS,
+                                                     REDUCE_SIZE,
+                                                     DROP_RATE)
+                    loss = tf.keras.losses.SparseCategoricalCrossentropy()
+                    # boundaries = [100, 1000]
+                    # values = [LR, LR/10., LR/100.]
+                    # lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(boundaries, values)
 
-                model = InceptionResNetV2Fashion((28, 28, 1), N_CLASS,
-                                                 REDUCE_SIZE,
-                                                 DROP_RATE)
-                loss = tf.keras.losses.SparseCategoricalCrossentropy()
-                # boundaries = [100, 1000]
-                # values = [LR, LR/10., LR/100.]
-                # lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(boundaries, values)
+                    if OPTIMIZER == 'adam':
+                        optimizer = tf.keras.optimizers.Adam(learning_rate=LR)
+                    else:
+                        optimizer = tf.keras.optimizers.SGD(learning_rate=LR)
+                    metric = tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy')
 
-                if OPTIMIZER == 'adam':
-                    optimizer = tf.keras.optimizers.Adam(learning_rate=LR)
-                else:
-                    optimizer = tf.keras.optimizers.SGD(learning_rate=LR)
-                metric = tf.keras.metrics.SparseCategoricalAccuracy(name='accuracy')
+                    model.compile(optimizer=optimizer, loss=loss, metrics=[metric],
+                                  run_eagerly=False)
 
-                model.compile(optimizer=optimizer, loss=loss, metrics=[metric],
-                              run_eagerly=False)
+                    # CREATE DATASET
+                    BATCH_SIZE = 32
+                    x_train_flip = tf.image.random_flip_left_right(x_train)
+                    train_dataset = tf.data.Dataset.from_tensor_slices((x_train_flip, y_train))
+                    valid_dataset = tf.data.Dataset.from_tensor_slices((x_valid, y_valid))
 
-                # CREATE DATASET
-                def scale(image, label):
-                    image = tf.cast(image, tf.float32)
-                    image /= 255
-                    return image, label
-                BATCH_SIZE = 32
-                x_train_flip = tf.image.random_flip_left_right(x_train)
-                train_dataset = tf.data.Dataset.from_tensor_slices((x_train_flip, y_train))
-                valid_dataset = tf.data.Dataset.from_tensor_slices((x_valid, y_valid))
+                    train_dataset = train_dataset.map(scale).cache().shuffle(10000).batch(BATCH_SIZE).prefetch(2)
+                    valid_dataset = valid_dataset.map(scale).batch(BATCH_SIZE*10) #scale function MANDATORY
 
-                train_dataset = train_dataset.map(scale).cache().shuffle(10000).batch(BATCH_SIZE).prefetch(2)
-                valid_dataset = valid_dataset.map(scale).batch(BATCH_SIZE*10) #scale function MANDATORY
+                    model.fit(train_dataset,
+                              validation_data=valid_dataset,
+                              epochs=6,
+                              callbacks=[tb_callback_hparam, tb_cm_callback, checkpoint_callback, early_callback, reduce_lr_callback],
+                              verbose=2)
+                    # batch_size>1! (computing AUROC)
+                    # checkpoint_callback is useless if epoch=1
 
-                model.fit(train_dataset,
-                          validation_data=valid_dataset,
-                          epochs=6,
-                          callbacks=[tb_callback_hparam, tb_cm_callback, checkpoint_callback, early_callback, reduce_lr_callback],
-                          verbose=2)
-                # batch_size>1! (computing AUROC)
-                # checkpoint_callback is useless if epoch=1
+
